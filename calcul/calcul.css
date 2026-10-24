@@ -941,3 +941,9 @@ button.mchoice:disabled{cursor:default;opacity:.7}
 .bilan-notes li span{font-weight:800;color:var(--sea)}
 @media (max-width:600px){ .bb{grid-template-columns:90px 1fr 40px} .mm-quote input{width:100px} }
 .qtext.cand.dense{font-size:clamp(17px,2.1vw,23px);line-height:1.38;text-align:left;max-width:760px;margin-inline:auto}
+.mm-ctx{text-align:center;margin:10px 0 0;font-weight:700;color:#eef3fa}
+.mm-help{margin-top:12px;padding:10px 14px;border-radius:12px;background:#0d111a;border:2px solid var(--edge,#2a3142);color:#d9e1ec;font-size:14px;text-align:left}
+.mm-help summary{cursor:pointer;font-weight:800;color:var(--gold,#e5a93c)}
+.mm-help ol{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:5px}
+.mm-sum{list-style:none;margin:6px auto 0;padding:0;max-width:520px;font-size:14px;display:flex;flex-direction:column;gap:4px}
+.mm-sum li.tot{margin-top:4px;font-size:16px}

@@ -3,7 +3,7 @@
 import { CATS, TIER_LABEL, DIFFS, MODULES, chartierTier, fmt } from '../engine/questions.js';
 import { staging } from './staging.js';
 import { MODES, POWERS, STEAL_MS, FOG_MS, describeAnswer, JOKERS, LIVES, TIER_SHOW_MS, INTER_MS, ANNOUNCE_MS, DUEL_SHOW_MS } from '../engine/rules.js';
-import { runMarket, MM_MAX_SPREAD, MM_LOT } from '../engine/cases.js';
+import { runMarket, parseQuotes, MM_MAX_SPREAD, MM_LOT } from '../engine/cases.js';
 import { buildProgram } from '../engine/code-data.js';
 import { runPython, preloadPython } from './py.js';
 import { highlightPy, highlightCode } from './pyhl.js';
@@ -467,10 +467,16 @@ export function mountGame(root, { me, answer, emote, sabotage = () => {}, joker 
             <label>Je vends à<input id="mmask" inputmode="decimal" maxlength="6" aria-label="Prix de vente"></label>
             <button class="btn yellow" id="mmgo">Coter</button>
           </form>
+          <p class="mm-ctx" id="mmctx"></p>
           <p class="tolhint" id="mmrule"></p>
           <ol class="mm-log" id="mmlog"></ol>
-        </div>
-        <p class="tolhint">Trois cotations : avant le premier dé, puis après chacun des deux premiers. Le client t'achète ${MM_LOT} lots si ton prix de vente lui paraît bas, t'en vend ${MM_LOT} si ton prix d'achat lui paraît haut. On solde à la somme finale.</p>`;
+          <details class="mm-help"${S.history.some((h) => h.input === 'mm') ? '' : ' open'}><summary>Comment ça marche ?</summary><ol>
+            <li>Tu ne devines pas la somme : tu donnes <b>deux prix</b>, un pour acheter, un pour vendre, un peu plus haut.</li>
+            <li>Le client choisit : si ton prix de vente lui paraît bas, il t'achète ${MM_LOT} lots (tu es <b>vendeur</b>) ; si ton prix d'achat lui paraît haut, il te vend ${MM_LOT} lots (tu es <b>acheteur</b>).</li>
+            <li>À la fin, tout est soldé à la vraie somme. Vendeur, tu gagnes si elle finit sous ton prix ; acheteur, si elle finit au-dessus.</li>
+            <li>Le bon centre : les dés déjà vus, plus <b>3,5</b> par dé restant. Avant tout dé : 3 × 3,5 = 10,5, donc par exemple 8,5 / 12,5.</li>
+          </ol></details>
+        </div>`;
     }
     if (q.input === 'multi') {
       return `<div class="multi-choices">${q.choices.map((c, k) => `<button type="button" class="mchoice" data-m="${k}" aria-pressed="false" style="--k:${k}"><span class="mbox"></span><span class="ct">${qText(c)}</span></button>`).join('')}</div>
@@ -674,7 +680,11 @@ export function mountGame(root, { me, answer, emote, sabotage = () => {}, joker 
   function wireMarket(q) {
     const quotes = [], idx = S.idx;
     const n = (v) => Number(String(v).trim().replace(',', '.'));
-    const rule = () => { const k = quotes.length; $('#mmrule').innerHTML = k < 3 ? `Cotation <b>${k + 1}/3</b> · fourchette de ${fmt(MM_MAX_SPREAD[k])} au plus · juste milieu à toi de le trouver` : 'Trois cotations envoyées. La somme se dévoile à la correction.'; };
+    const rule = () => {
+      const k = quotes.length, seen = q.mm.dice.slice(0, k);
+      $('#mmrule').innerHTML = k < 3 ? `Cotation <b>${k + 1}/3</b> · écart de ${fmt(MM_MAX_SPREAD[k])} au plus entre tes deux prix` : 'Trois cotations envoyées. Le dernier dé se dévoile à la correction.';
+      $('#mmctx').innerHTML = k < 3 ? `${seen.length ? `Dés vus : <b>${seen.join(' + ')}</b>.` : 'Aucun dé vu.'} Il en reste ${3 - k}, qui valent 3,5 en moyenne chacun.` : '';
+    };
     const send = () => { if (myAns != null || !quotes.length) return; myAns = quotes.map((x) => x.join('/')).join(';'); answer(myAns); sfx.play('lock'); pcAnswered(); for (const e of root.querySelectorAll('#mmform input, #mmgo')) e.disabled = true; };
     rule();
     setTimeout(() => { try { $('#mmbid').focus({ preventScroll: true }); } catch (e) {} }, 60);
@@ -690,7 +700,8 @@ export function mountGame(root, { me, answer, emote, sabotage = () => {}, joker 
       if (ask - bid > MM_MAX_SPREAD[k] + 1e-9) return toast(`Trop large : ${fmt(MM_MAX_SPREAD[k])} d'écart au plus à ce tour`);
       quotes.push([bid, ask]);
       const run = runMarket(q.mm, quotes), d = run.log[k];
-      const what = d.kind === 'buy' ? `Le client t'achète ${MM_LOT} lots à ${fmt(ask)}` : d.kind === 'sell' ? `Le client te vend ${MM_LOT} lots à ${fmt(bid)}` : 'Le client passe son tour';
+      const what = d.kind === 'buy' ? `Le client t'achète ${MM_LOT} lots à ${fmt(ask)} : tu gagnes si la somme finit sous ${fmt(ask)}`
+        : d.kind === 'sell' ? `Le client te vend ${MM_LOT} lots à ${fmt(bid)} : tu gagnes si la somme finit au-dessus de ${fmt(bid)}` : 'Le client trouve ton prix juste : pas de deal';
       const pos = run.log.slice(0, k + 1).reduce((t, x) => t + (x.kind === 'buy' ? -MM_LOT : x.kind === 'sell' ? MM_LOT : 0), 0);
       $('#mmlog').insertAdjacentHTML('beforeend', `<li class="${d.kind}"><b>${fmt(bid)} / ${fmt(ask)}</b><span>${what}</span><em>position ${pos > 0 ? '+' : ''}${pos}</em></li>`);
       sfx.play(d.kind === 'pass' ? 'pop' : 'lock');
@@ -699,6 +710,16 @@ export function mountGame(root, { me, answer, emote, sabotage = () => {}, joker 
       rule();
       if (quotes.length === 3) { clearTimeout(auto); send(); } else $('#mmbid').focus({ preventScroll: true });
     };
+  }
+
+  // Correction du market making : chacun de mes deals, ce qu'il rapporte une fois soldé à la somme finale
+  function mmDetail(L, mine) {
+    if (!mine || mine.raw == null) return '';
+    const run = runMarket(L.mm, parseQuotes(mine.raw)), V = run.V, sg = (x) => (x > 0 ? '+' : '') + fmt(x);
+    const rows = run.log.map((d) => d.kind === 'buy' ? `<li>Vendu ${MM_LOT} à ${fmt(d.ask)} → ${MM_LOT} × (${fmt(d.ask)} − ${V}) = <b>${sg(MM_LOT * (d.ask - V))}</b></li>`
+      : d.kind === 'sell' ? `<li>Acheté ${MM_LOT} à ${fmt(d.bid)} → ${MM_LOT} × (${V} − ${fmt(d.bid)}) = <b>${sg(MM_LOT * (V - d.bid))}</b></li>`
+      : d.kind === 'pass' ? `<li>${fmt(d.bid)} / ${fmt(d.ask)} : pas de deal</li>` : `<li>Cotation ${d.k + 1} manquante ou trop large : <b>−2</b></li>`).join('');
+    return `<ol class="mm-sum">${rows}<li class="tot">Ton P&L : <b>${sg(run.pnl)}</b></li></ol>`;
   }
 
   function pcSay(text, mood = '', ms = 2600) {
@@ -804,7 +825,7 @@ export function mountGame(root, { me, answer, emote, sabotage = () => {}, joker 
       : ch && L.input === 'choice' ? candGrid(L)
       : L.input === 'multi' ? `<div class="multi-choices rev">${L.choices.map((c, k) => { const good = L.answer.includes(k), mine = myPick(k); return `<div class="mchoice ${good ? 'good' : mine ? 'bad' : 'dim'}"><span class="mbox">${good ? '✓' : mine ? '✗' : ''}</span><span class="ct">${qText(c)}</span></div>`; }).join('')}</div>`
       : L.input === 'text' ? `<div class="copybox">${esc(L.show)}</div>`
-      : L.input === 'mm' ? `<div class="mm-dice rev">${L.mm.dice.map((d) => `<span class="die shown">${d}</span>`).join('<i>+</i>')}<i>=</i><span class="die sum shown">${L.mm.dice.reduce((a, b) => a + b, 0)}</span></div>`
+      : L.input === 'mm' ? `<div class="mm-dice rev">${L.mm.dice.map((d) => `<span class="die shown">${d}</span>`).join('<i>+</i>')}<i>=</i><span class="die sum shown">${L.mm.dice.reduce((a, b) => a + b, 0)}</span></div>${mmDetail(L, mine)}`
       : `<div class="bigans">${qText(L.show)}</div>`;
     const fast = L.results.find((r) => r.tags.includes('eclair') || (S.cfg.mode === 'eclair' && r.pts > 0));
     const recall = q.input === 'expr' ? `${qText(h.text)} 🎯` : q.input === 'choice' ? qText(h.text) : qText(h.eq === false ? h.text.replace(/\?$/, '…').replace(/ \? /, ' … ') : h.text) + (h.eq === false ? '' : ' =');

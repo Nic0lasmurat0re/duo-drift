@@ -4,7 +4,7 @@
 - **Tête de Calcul** — Trois nouvelles épreuves dans The Candidate.
   - Un cas pratique par partie : trois questions liées sur un même dossier (mini-LBO, book d'options à couvrir, VaR d'un portefeuille, couverture d'une obligation). Chaque étape rappelle le résultat de la précédente.
   - Pierre relance : après une question, « et si… ? » sur la même situation. Bonus plein si ta première réponse était juste, moitié sinon, et aucune vie en jeu.
-  - Market making : fais un prix acheteur et vendeur sur la somme de trois dés, dévoilés un par un, face à un client. Tes points suivent ton P&L.
+  - Market making : fais un prix acheteur et vendeur sur la somme de trois dés, dévoilés un par un, face à un client. Tes points suivent ton P&L. Un guide « Comment ça marche ? » accompagne ta première partie, l'écran rappelle les dés déjà vus, et la correction détaille ce que chaque deal t'a rapporté.
 - **Tête de Calcul** — À la fin de l'entretien, le bilan de Pierre Chartier : tes points forts et faibles rubrique par rubrique, et les notions à revoir.
 - **Tête de Calcul** — Plus de contenu dans The Candidate.
   - Une nouvelle rubrique Risques (VaR, expected shortfall, crédit, contrepartie, Bâle III, liquidité), qui pèse lourd dans le poste Risques.
