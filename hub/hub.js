@@ -18,6 +18,7 @@
   let room = null;
   let frame = null;        // { game, n, el, loaded }
   let leftGame = null;     // partie quittée volontairement (pas de rechargement automatique)
+  let launchAnyway = 0;    // lancer malgré une version différente : second clic dans les 8 s
   const pick = { game: GAMES[0].id, settings: {} };
   for (const g of GAMES) {
     pick.settings[g.id] = {};
@@ -31,6 +32,56 @@
     let t = $('.toast'); if (!t) { t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
     t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, ms);
   }
+
+  /* ------------------------------------------------------------ mises à jour */
+  // Un onglet ouvert avant une mise en ligne garde l'ancienne version tant qu'on ne le recharge pas : ses jeux n'ont
+  // plus les mêmes fichiers que ceux des autres joueurs (au Backrooms, une autre carte). Le Hub compare sa version à
+  // celle en ligne (au démarrage, puis toutes les 3 minutes hors partie) et à celle de chaque joueur du salon : en
+  // retard, il se met à jour tout seul et revient dans le même salon.
+  const verNum = (v) => { const m = /^(\d+)\.(\d+)$/.exec(String(v || '')); return m ? +m[1] * 10000 + +m[2] : 0; };
+  async function onlineVersion() {
+    try {
+      const r = await fetch('hub/hub.js?t=' + Date.now(), { cache: 'no-store' });
+      const m = /const VERSION = '([\d.]+)'/.exec(await r.text());
+      return m ? m[1] : '';
+    } catch (e) { return ''; }
+  }
+  let updating = false;
+  async function updateTo(target) {
+    if (updating) return;
+    // on vient déjà de recharger pour cette version (elle n'est pas encore servie partout) : pas de boucle
+    let last = null;
+    try { last = JSON.parse(sessionStorage.getItem('hub_update') || 'null'); } catch (e) {}
+    if (last && last.v === target && Date.now() - last.t < 120000) { toast(`La version ${target} arrive : recharge la page dans une minute (Ctrl+Maj+R)`, 6000); return; }
+    updating = true;
+    try { sessionStorage.setItem('hub_update', JSON.stringify({ v: target, t: Date.now() })); } catch (e) {}
+    toast(`Mise à jour vers la version ${target}…`, 8000);
+    // les fichiers du Hub gardés par le navigateur sont repris pour de bon, puis la page (on revient dans le salon)
+    const urls = [...document.querySelectorAll('script[src], link[rel=stylesheet][href]')].map((e) => e.src || e.href).filter((u) => u.startsWith(location.origin));
+    await Promise.all(urls.map((u) => fetch(u, { cache: 'reload' }).catch(() => {})));
+    const q = new URLSearchParams();
+    for (const k of ['local', 'ws', 'as', 'debug', 'mute']) if (QS.has(k)) q.set(k, QS.get(k));
+    const code = room && room.mode !== 'solo' && room.code;
+    if (code) q.set('join', code);
+    location.replace(location.pathname + (q.toString() ? '?' + q.toString().replace(/=(&|$)/g, '$1') : ''));
+  }
+  async function checkOnline() {
+    if (frame || updating) return; // jamais au milieu d'une partie
+    const v = await onlineVersion();
+    if (verNum(v) > verNum(VERSION) && !frame) updateTo(v);
+  }
+  // les joueurs du salon qui n'ont pas notre version (sans version : un Hub d'avant cette vérification, donc ancien)
+  const otherVersion = (p) => p.id !== (room && room.myId) && (p.ver || '') !== VERSION;
+  let peerWarned = '';
+  function checkPeers() {
+    if (!room || room.mode === 'solo') return;
+    const newer = room.players.filter((p) => p.id !== room.myId && verNum(p.ver) > verNum(VERSION)).sort((a, b) => verNum(b.ver) - verNum(a.ver))[0];
+    if (!newer) return;
+    if (!frame) { updateTo(newer.ver); return; }
+    if (peerWarned !== newer.ver) { peerWarned = newer.ver; toast(`${newer.name} a la version ${newer.ver} : tu seras mis à jour à la fin de la partie`, 6000); }
+  }
+  setTimeout(checkOnline, 4000);
+  setInterval(checkOnline, 180000);
 
   /* ------------------------------------------------------------ accueil */
   $('#ver').textContent = 'v' + VERSION;
@@ -344,7 +395,7 @@
   // page des logs : outil de développement, visible seulement avec ?debug
   if (QS.has('debug')) for (const id of ['#btnLogs', '#btnLogsRoom']) $(id).hidden = false;
   const busy = (b) => { for (const id of ['#btnHost', '#btnJoin', '#btnSolo']) $(id).disabled = b; };
-  const profile = () => ({ name: DDRoom.cleanName(me.name), color: me.color, lvl: me.lvl, uid: me.uid, fid: me.fid || undefined });
+  const profile = () => ({ name: DDRoom.cleanName(me.name), color: me.color, lvl: me.lvl, uid: me.uid, fid: me.fid || undefined, ver: VERSION });
 
   $('#btnHost').onclick = () => { homeErr(''); busy(true); $('#btnHost').textContent = 'Création…'; newRoom(); room.host(profile()); };
   $('#btnJoin').onclick = () => {
@@ -387,7 +438,7 @@
     $('#chatLog').innerHTML = '';
     room = DDRoom.create({
       joined() { busy(false); $('#btnHost').textContent = 'Créer un salon'; $('#btnJoin').textContent = 'Rejoindre'; showScreen(frame ? 'play' : 'room'); renderRoom(); },
-      update() { renderRoom(); syncFrame(); postRoster(); if (window.HubInGame) window.HubInGame.refresh(); },
+      update() { renderRoom(); syncFrame(); postRoster(); checkPeers(); if (window.HubInGame) window.HubInGame.refresh(); },
       chat(c) { appendChat(c); },
       game(from, m) { if (frame && frame.loaded) frame.el.contentWindow.postMessage({ dd: 'hub', k: 'msg', from, m }, ORIGIN); },
       error(msg) { if ($('#home').classList.contains('on')) goHome(msg); else toast(msg, 4000); },
@@ -486,6 +537,7 @@ renderPlayers(); renderNet(); pubState(); renderFriends(); renderPings();
       if (p.away) tags.push('<span class="pill away" title="Sa connexion a sauté : le serveur lui garde sa place">reconnexion…</span>');
       else if (room.ready[p.id]) tags.push('<span class="pill in">En jeu</span>');
       const other = p.id !== room.myId;
+      if (otherVersion(p)) tags.push(`<span class="pill away" title="Il doit recharger la page (Ctrl+Maj+R) : sinon vos parties ne seront pas les mêmes">${p.ver ? 'v' + esc(p.ver) : 'ancienne version'}</span>`);
       if (other && p.fid && FR.isFriend(p.fid)) tags.push('<span class="pill fr" title="Ton ami">Ami</span>');
       else if (other && p.fid && FR.status === 'on' && p.fid !== FR.fid) tags.push(FR.sent.has(p.fid)
         ? '<span class="addf" aria-disabled="true">Demandé</span>'
@@ -631,7 +683,16 @@ renderPlayers(); renderNet(); pubState(); renderFriends(); renderPings();
       const v = isNaN(Number(b.dataset.v)) ? b.dataset.v : Number(b.dataset.v);
       set[b.dataset.k] = v; DDProfile.set('hub_set_' + g.id + '_' + b.dataset.k, v); renderLaunch();
     };
-    $('#btnLaunch').onclick = () => { leftGame = null; room.setGame(g.id, { ...set }); };
+    $('#btnLaunch').onclick = () => {
+      // quelqu'un n'a pas la même version : ses fichiers de jeu diffèrent (une autre carte) ; on prévient d'abord
+      const off = room.players.filter(otherVersion);
+      if (off.length && !(launchAnyway > performance.now())) {
+        launchAnyway = performance.now() + 8000;
+        toast(`${off.map((p) => p.name).join(', ')} n'${off.length > 1 ? 'ont' : 'a'} pas la même version que toi : il faut recharger la page (Ctrl+Maj+R). Clique encore pour lancer quand même.`, 7000);
+        return;
+      }
+      leftGame = null; room.setGame(g.id, { ...set });
+    };
   }
 
   /* ------------------------------------------------------------ jeu dans l'iframe */
@@ -681,6 +742,7 @@ const watchdog = setTimeout(() => {
     if (window.HubInGame) window.HubInGame.close();
     if (room) room.setReady(null);
     if (toRoom && room) { showScreen('room'); renderRoom(); }
+    setTimeout(() => { checkPeers(); checkOnline(); }, 800); // une mise à jour attendait la fin de la partie
   }
 
   function postRoster() {
@@ -726,4 +788,13 @@ const watchdog = setTimeout(() => {
 
   addEventListener('pagehide', () => { try { if (room) room.leave(); } catch (e) {} });
   if (joinParam) $('#name').focus();
+  // juste après une mise à jour automatique : on revient tout seul dans le salon qu'on a quitté pour elle
+  try {
+    const upd = JSON.parse(sessionStorage.getItem('hub_update') || 'null');
+    if (joinParam && upd && Date.now() - upd.t < 60000 && !upd.back) {
+      upd.back = true;
+      sessionStorage.setItem('hub_update', JSON.stringify(upd));
+      setTimeout(() => { if (!room && $('#joinCode').value.length === 4) $('#btnJoin').click(); }, 300);
+    }
+  } catch (e) {}
 })();

@@ -2834,7 +2834,8 @@ float ghash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453)
         const pm = sim.fm(P.floor || 0);
         let heldWas = true;
         const py = feetY(sim.stairs, P.x, P.z, P.floor || 0) + (P.onLadder ? 1.0 : 0) + (P.jy || 0) - (pm.depthAt ? pm.depthAt(P.x, P.z) : 0);
-        inset.render(camQ, { x: S.x, y: ey, z: S.z }, fov, scene, avatars, time, dt, {
+        // son regard suit la même piste que son corps (sans à-coups)
+        inset.render(S.yaw !== undefined ? { ...camQ, yaw: S.yaw } : camQ, { x: S.x, y: ey, z: S.z }, fov, scene, avatars, time, dt, {
           show() {
             heldWas = held.visible;
             held.visible = false;

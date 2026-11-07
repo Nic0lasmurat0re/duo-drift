@@ -70,14 +70,14 @@ export function createVoice({ send, myId, sfx }) {
       pre.delayTime.value = 0.028;
       const hp = c.createBiquadFilter();
       hp.type = 'highpass';
-      hp.frequency.value = 280;
+      hp.frequency.value = 220;
       verbIn.connect(pre).connect(hp);
       verbPre = hp;
       verbOut = c.createBiquadFilter();
       verbOut.type = 'lowpass';
       verbOut.frequency.value = 3200;
       const wet = c.createGain();
-      wet.gain.value = 0.32;
+      wet.gain.value = 0.55; // la salle s'entend toujours (en 4.62 elle avait presque disparu)
       verbOut.connect(wet).connect(bus);
     }
     // la salle des voix change avec le niveau : moquette (courte et mate), entrepôt, piscine (longue), conduites
@@ -248,8 +248,8 @@ export function createVoice({ send, myId, sfx }) {
     pan.distanceModel = 'linear';
     pan.rolloffFactor = 0; // la distance, on la règle nous-mêmes (murs, étages)
     src.connect(lp).connect(pg).connect(pan).connect(o);
-    // la réverbération : une piste à part, prise avant le volume de la voix sèche. Tout près, la voix est sèche (un
-    // soupçon d'écho) ; en s'éloignant, la voix directe s'efface plus vite que l'écho des couloirs, qui finit par
+    // la réverbération : une piste à part, prise avant le volume de la voix sèche. Tout près, la salle s'entend déjà
+    // derrière la voix ; en s'éloignant, la voix directe s'efface plus vite que l'écho des couloirs, qui finit par
     // rester presque seul
     const vs = c.createGain();
     vs.gain.value = 0;
@@ -719,9 +719,10 @@ export function createVoice({ send, myId, sfx }) {
                 p.los = los;
               }
               if (!floors && !p.los) near *= 0.65;
-              // l'écho : il porte un peu plus loin que la voix, et sa part grandit avec la distance
+              // l'écho : présent même tout près (on est dans des couloirs vides), il porte un peu plus loin que la voix, et
+              // sa part grandit avec la distance
               const far = Math.min(1, d / VOICE_R);
-              rev = Math.pow(Math.max(0, 1 - d / (VOICE_R * 1.35)), 0.8) * (0.03 + 0.6 * Math.pow(far, 1.5)) * (floors ? 0.3 : !p.los ? 0.8 : 1);
+              rev = Math.pow(Math.max(0, 1 - d / (VOICE_R * 1.35)), 0.8) * (0.25 + 0.75 * Math.pow(far, 1.2)) * (floors ? 0.3 : !p.los ? 0.8 : 1);
               sfx.moveTo(p.chain.pan, Q.x, Q.z, 0.05);
             }
           }

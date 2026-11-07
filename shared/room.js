@@ -2,7 +2,7 @@
    le jeu choisi et l'état « prêt » de chaque joueur dans ce jeu ; il relaie les messages des jeux.
 
    Protocole (champ t) :
-     invité → hôte : hello {name,color,lvl,uid,fid,sid,prevId} · me {name,lvl,fid} · chat {txt} · ready {game} · g {to,m} · ping · bye
+     invité → hôte : hello {name,color,lvl,uid,fid,sid,prevId,ver} · me {name,lvl,fid} · chat {txt} · ready {game} · g {to,m} · ping · bye
      hôte → invité : welcome {id} · lobby {players,game,ready,code,host} · chat {...} · g {from,m} · pong · full · bye
    `g` transporte les messages d'un jeu ; le Hub ne les lit pas. `to` vaut un id de joueur, 'host' ou 'all'.
    `v` (volatil) : instantané d'état continu ; sauté si la connexion sature, et à l'arrivée seul le plus récent
@@ -18,6 +18,7 @@
   const PREFIX = 'ddhub-v1-';
   const PALETTE = ['#ff4b2b', '#2b8cff', '#ffc531', '#2fbf71', '#b45cff', '#ff5fa2', '#1fc7c1', '#ff8a1f'];
   const clean = (s, n) => String(s || '').replace(/[<>&"]/g, '').trim().slice(0, n);
+  const cleanVer = (v) => (/^\d{1,3}\.\d{1,4}$/.test(String(v || '')) ? String(v) : '');
   const cleanName = (s) => clean(s, 12) || 'Joueur';
   const cleanUid = (s) => (/^[a-z0-9]{6,16}$/.test(String(s)) ? String(s) : null);
   const cleanFid = (s) => (/^[A-Z2-9]{8}$/.test(String(s)) ? String(s) : undefined); // code ami (hub/friends.js)
@@ -105,6 +106,7 @@
             if (sid) sids[existing.id] = sid;
             existing.name = cleanName(m.name);
             if (cleanFid(m.fid)) existing.fid = cleanFid(m.fid);
+            if (cleanVer(m.ver)) existing.ver = cleanVer(m.ver);
             if (m.ready) R.ready[existing.id] = m.ready;
             net.to(cid, { t: 'welcome', id: existing.id, chat: R.chat.slice(-20) });
             changed();
@@ -126,6 +128,7 @@
           const color = PALETTE.includes(m.color) && !usedC.has(m.color) ? m.color : PALETTE.find((c) => !usedC.has(c));
           const np = { id, cid, name: cleanName(m.name), color, lvl: Math.max(1, Math.min(99, m.lvl | 0)), uid: uid || 'g' + Math.random().toString(36).slice(2, 10) };
           if (cleanFid(m.fid)) np.fid = cleanFid(m.fid);
+          if (cleanVer(m.ver)) np.ver = cleanVer(m.ver); // la version de son Hub : le salon voit qui est en retard
           if (sid) sids[id] = sid;
           R.players.push(np);
           if (m.ready) R.ready[id] = m.ready;
@@ -214,7 +217,7 @@ removePlayer(R.players[i]);
       ready, error, join(cid) { R.lastRecvC[cid] = performance.now(); },
       msg: onHostMsg, leave: onHostLeave, away: onHostAway, reset: onHostReset, lost: onHostLost, status: netStatus,
     });
-    const hello = (me, extra) => net.toHost({ t: 'hello', name: me.name, color: me.color, lvl: me.lvl, uid: me.uid, fid: me.fid, sid: SID,
+    const hello = (me, extra) => net.toHost({ t: 'hello', name: me.name, color: me.color, lvl: me.lvl, uid: me.uid, fid: me.fid, ver: me.ver, sid: SID,
       prevId: R.myId >= 0 ? R.myId : undefined, ready: myReady || undefined, ...extra });
 
     /* ---------- invité ---------- */
@@ -307,7 +310,7 @@ removePlayer(R.players[i]);
       R.mode = 'host'; R.hostId = R.myId; R.lastRecvC = {}; R.pings = {}; R.hostAway = false; // l'hôte, c'est nous désormais
       for (const k in sids) delete sids[k];
       for (const k in lostAt) delete lostAt[k];
-      R.players = [{ id: R.myId, name: cleanName(me.name), color: me.color, lvl: me.lvl | 0 || 1, uid: me.uid, fid: cleanFid(me.fid) }];
+      R.players = [{ id: R.myId, name: cleanName(me.name), color: me.color, lvl: me.lvl | 0 || 1, uid: me.uid, fid: cleanFid(me.fid), ver: cleanVer(me.ver) || undefined }];
       R.ready = myReady ? { [R.myId]: myReady } : {};
       let tries = 0;
       const go = () => net.host(hostCallbacks(
@@ -334,7 +337,7 @@ removePlayer(R.players[i]);
     /* ---------- API ---------- */
     Object.assign(R, {
       host(me) {
-        R.mode = 'host'; R.myId = 0; R.hostId = 0; R.hostAway = false; R.players = [{ id: 0, name: cleanName(me.name), color: me.color, lvl: me.lvl | 0 || 1, uid: me.uid, fid: cleanFid(me.fid) }];
+        R.mode = 'host'; R.myId = 0; R.hostId = 0; R.hostAway = false; R.players = [{ id: 0, name: cleanName(me.name), color: me.color, lvl: me.lvl | 0 || 1, uid: me.uid, fid: cleanFid(me.fid), ver: cleanVer(me.ver) || undefined }];
         R.chat = []; R.ready = {}; R.game = null; R.code = null;
         net.host(hostCallbacks(
           (code) => { R.code = code; emit('joined', R); changed(); },
@@ -355,7 +358,7 @@ open() { R.lastRecv = performance.now(); R.hostAway = false; hello(me); },
       },
       solo(me) {
         R.mode = 'solo'; R.myId = 0; R.hostId = 0; R.code = null; R.chat = []; R.ready = {}; R.game = null;
-        R.players = [{ id: 0, name: cleanName(me.name), color: me.color, lvl: me.lvl | 0 || 1, uid: me.uid, fid: cleanFid(me.fid) }];
+        R.players = [{ id: 0, name: cleanName(me.name), color: me.color, lvl: me.lvl | 0 || 1, uid: me.uid, fid: cleanFid(me.fid), ver: cleanVer(me.ver) || undefined }];
         setTimeout(() => { emit('joined', R); emit('update', R); }, 0);
       },
       leave() { migrating = false; myReady = null; net.close(); R.mode = null; R.players = []; R.game = null; R.ready = {}; R.code = null; },
