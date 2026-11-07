@@ -427,26 +427,63 @@ function initGame(settings = lastSettings, forceLevel = null) {
   if (NET.role === 'host') send('all', goMessage());
 }
 
-// Invité : la carte de l'hôte a-t-elle la même empreinte que la nôtre ? Sinon (une version plus ancienne en cache),
-// les murs, les escaliers et les objets ne sont pas aux mêmes endroits chez nous : on prévient, une fois par étage.
-// Le message revient toutes les 40 s tant que les cartes diffèrent : la partie n'est pas jouable ainsi.
+// Invité : la carte de l'hôte a-t-elle la même empreinte que la nôtre ? Sinon, les murs, les escaliers et les cassettes
+// ne sont pas aux mêmes endroits chez nous : la partie est injouable. Celui qui a tort se répare tout seul : le Hub
+// reprend ses fichiers (et ceux du jeu) à la version la plus récente des deux, recharge, revient dans le salon puis
+// dans la partie. Un invité plus ancien (ou à la même version, fichiers abîmés en cache) se répare chez lui ; si
+// l'hôte est le plus ancien, ou si l'invité s'est déjà réparé sans succès, c'est l'hôte (la partie continue chez les
+// autres : l'un d'eux prend le relais).
 const GAME_V = new URLSearchParams(location.search).get('v') || ''; // la version du Hub qui a lancé le jeu
 let hostV = '';
 let printWarnT = -Infinity;
+let printBad = 0;
 const verLabel = (v) => (v ? `V${v}` : 'AN OLD VERSION');
+// 4.100 vient après 4.99 (on ne compare pas des nombres à virgule)
+const verNum = (v) => {
+  const m = /^(\d+)\.(\d+)$/.exec(String(v || ''));
+  return m ? +m[1] * 10000 + +m[2] : 0;
+};
+// les fichiers du jeu, tels que chargés (à la version du Hub)
+const gameFiles = () => (window.BACKROOMS_FILES || []).concat('backrooms.css').map((f) => new URL(f, location.href).href + (GAME_V ? '?v=' + encodeURIComponent(GAME_V) : ''));
+// on vient déjà de recharger pour cette version (sans succès) ?
+function triedUpdate(v) {
+  try {
+    const last = JSON.parse(sessionStorage.getItem('hub_update') || 'null');
+    return !!(last && last.v === v && Date.now() - last.t < 120000);
+  } catch (e) {
+    return false;
+  }
+}
+function selfUpdate(v) {
+  if (!H.embedded || !H.outdated || triedUpdate(v)) return false;
+  if (hud) hud.toast(`MAPS DON'T MATCH · UPDATING YOUR GAME TO ${verLabel(v)}…`, 8);
+  H.outdated(v, gameFiles());
+  return true;
+}
 function checkPrint(fp) {
-  if (typeof fp !== 'string' || !sim || fp === sim.fp) return;
+  if (typeof fp !== 'string' || !sim) return;
+  if (fp === sim.fp) {
+    printBad = 0;
+    return;
+  }
+  // trois instantanés de suite (un changement d'étage peut croiser un instantané de l'étage d'avant)
+  if (++printBad < 3) return;
+  const hv = verNum(hostV);
+  const gv = verNum(GAME_V);
+  if (!(hv && gv && hv < gv)) {
+    if (selfUpdate(hv > gv ? hostV : GAME_V)) return;
+  }
   const now = performance.now();
   if (now - printWarnT < 40000) return;
   printWarnT = now;
-  const older = hostV && GAME_V && hostV !== GAME_V ? (+hostV > +GAME_V ? 'you' : 'host') : '';
+  const older = hv && gv && hv !== gv ? (hv > gv ? 'you' : 'host') : '';
   const msg = older === 'host'
-    ? `MAPS DON'T MATCH · THE HOST HAS ${verLabel(hostV)}, YOU HAVE ${verLabel(GAME_V)} · THE HOST MUST RELOAD (CTRL+SHIFT+R)`
+    ? `MAPS DON'T MATCH · THE HOST HAS ${verLabel(hostV)}, YOU HAVE ${verLabel(GAME_V)} · THE HOST IS UPDATING`
     : older === 'you'
       ? `MAPS DON'T MATCH · YOU HAVE ${verLabel(GAME_V)}, THE HOST HAS ${verLabel(hostV)} · RELOAD THE PAGE (CTRL+SHIFT+R)`
-      : "MAPS DON'T MATCH · SOMEONE HAS AN OLD VERSION · EVERYONE RELOAD (CTRL+SHIFT+R)";
+      : "MAPS DON'T MATCH · THE HOST IS UPDATING";
   if (hud) hud.toast(msg, 14);
-  send(H.info.hostId, { t: 'fp', v: GAME_V });
+  send(H.info.hostId, { t: 'fp', v: GAME_V, tried: triedUpdate(GAME_V) ? 1 : 0 });
 }
 
 const goMessage = () => ({ t: 'go', v: GAME_V, run: NET.run, seed: sim.seed, diff: sim.difficulty, players: sim.roster, lv: sim.level, vip: monstersVip, dy: dailyLabel });
@@ -547,14 +584,20 @@ function onMsg(from, m) {
     } else if (m.t === 'i' && m.run === NET.run) {
       NET.inputs[from] = { seq: Number.isFinite(+m.n) ? +m.n : undefined, vo: num(m.vo, 0, 1), ra: !!m.ra, mx: num(m.mx, -1, 1), my: num(m.my, -1, 1), run: !!m.r, c: !!m.c, cm: !!m.cm, yaw: num(m.yaw, -1e4, 1e4), pitch: num(m.pitch, -1.4, 1.4), sel: m.s === 2 ? 2 : 1, tilt: num(m.tl, -1, 1), st: num(m.st, 0, 200), pos: { x: num(m.x, 0, 1e3), z: num(m.z, 0, 1e3) }, v: m.v };
     } else if (m.t === 'fp' && hud) {
-      // un invité n'a pas la même carte que nous : l'un des deux tourne sur une autre version du jeu
+      // un invité n'a pas la même carte que nous : s'il a une version plus récente, ou la même et qu'il s'est déjà
+      // réparé sans succès, c'est nous qui avons tort (la partie continue chez les autres pendant qu'on se répare)
       const p = H.players.find((q) => q.id === from);
       const who = ((p && p.name) || 'A player').toUpperCase();
       const gv = typeof m.v === 'string' ? m.v.slice(0, 8) : '';
-      const meOlder = gv && GAME_V && +gv > +GAME_V;
-      hud.toast(meOlder
-        ? `MAPS DON'T MATCH · ${who} HAS ${verLabel(gv)}, YOU HAVE ${verLabel(GAME_V)} · RELOAD THE PAGE (CTRL+SHIFT+R)`
-        : `MAPS DON'T MATCH · ${who} HAS ${verLabel(gv)} · THEY MUST RELOAD (CTRL+SHIFT+R)`, 14);
+      const a = verNum(gv);
+      const b = verNum(GAME_V);
+      if ((a > b || (a && a === b && m.tried)) && selfUpdate(a > b ? gv : GAME_V)) return;
+      if (performance.now() - printWarnT > 20000) {
+        printWarnT = performance.now();
+        hud.toast(a > b
+          ? `MAPS DON'T MATCH · ${who} HAS ${verLabel(gv)}, YOU HAVE ${verLabel(GAME_V)} · RELOAD THE PAGE (CTRL+SHIFT+R)`
+          : `MAPS DON'T MATCH · ${who} HAS ${verLabel(gv)} · ${who} IS UPDATING`, 14);
+      }
     } else if (m.t === 'a' && m.run === NET.run && ['f', 'e', 'p', 't', 'b', 'h', 'g'].includes(m.k)) {
       const q = NET.actions[from] || (NET.actions[from] = []);
       if (q.length < 8) q.push({ k: m.k, sel: m.s === 2 ? 2 : 1, side: m.side > 0 ? 1 : -1, n: Math.max(1, Math.min(4, m.n | 0)) });
@@ -568,6 +611,14 @@ function onMsg(from, m) {
     if (m.run !== NET.run || !sim) {
       dailyLabel = typeof m.dy === 'string' ? m.dy.slice(0, 12) : null;
       startRun({ seed: m.seed, difficulty: m.diff, players: m.players || [], run: m.run, level: m.lv || 0, vip: !!m.vip });
+    }
+  } else if (m.t === 's' && m.run !== NET.run) {
+    // une partie que l'on n'a pas (le « go » de l'hôte s'est perdu, une nouvelle partie a commencé sans nous) : on la
+    // redemande, au plus toutes les 1,5 s, au lieu de rester sur l'ancienne carte
+    const t = performance.now();
+    if (!(t - (NET.askT || -1e9) < 1500)) {
+      NET.askT = t;
+      send('host', { t: 'hi' });
     }
   } else if (m.t === 's' && sim && m.run === NET.run) {
     const lv = sim.level;

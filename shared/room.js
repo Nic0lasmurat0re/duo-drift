@@ -361,6 +361,14 @@ open() { R.lastRecv = performance.now(); R.hostAway = false; hello(me); },
         R.players = [{ id: 0, name: cleanName(me.name), color: me.color, lvl: me.lvl | 0 || 1, uid: me.uid, fid: cleanFid(me.fid), ver: cleanVer(me.ver) || undefined }];
         setTimeout(() => { emit('joined', R); emit('update', R); }, 0);
       },
+      // le code que le salon aura quand je le quitte : le mien si je suis invité ; si je suis l'hôte, celui sous lequel
+      // le joueur au plus petit numéro le reprendra (migration) ; null si je suis seul (le salon disparaît avec moi)
+      successorCode() {
+        if (!R.code || R.mode === 'solo') return null;
+        if (!R.isHost) return R.code;
+        const ids = R.players.filter((p) => p.id !== R.myId).map((p) => p.id).sort((a, b) => a - b);
+        return ids.length ? deriveCode(R.code, ids[0]) : null;
+      },
       leave() { migrating = false; myReady = null; net.close(); R.mode = null; R.players = []; R.game = null; R.ready = {}; R.code = null; },
       updateMe(me) {
         if (R.isHost) { const p = R.me; if (p) { p.name = cleanName(me.name); p.lvl = me.lvl | 0 || 1; if (cleanFid(me.fid)) p.fid = me.fid; changed(); } }

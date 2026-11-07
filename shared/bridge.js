@@ -10,6 +10,8 @@
      HubBridge.send(to, m, opts)        to = id de joueur, 'host' ou 'all' ; opts.volatile : instantané d'état continu
                                         (sauté si la connexion sature, seul le plus récent est livré)
      HubBridge.exit()                   retour au salon
+     HubBridge.outdated(v, files)       ce jeu n'a pas la même carte que l'hôte : le Hub reprend ses fichiers (et ceux
+                                        du jeu, files) à la version v ou à la sienne, recharge et revient dans le salon
      HubBridge.patchNet(Net)            remplace un objet Net façon Duo Drift par le canal du Hub */
 (function () {
   // navigation des menus à la manette (même dossier que ce fichier)
@@ -124,6 +126,7 @@
   H.signalReady = () => { post({ k: 'ready' }); if (!readyAt && embedded) { readyAt = performance.now(); watchShown(); } };
   H.send = (to, m, opts) => post(opts && opts.volatile ? { k: 'send', to, m, v: 1 } : { k: 'send', to, m });
   H.exit = () => post({ k: 'exit' });
+  H.outdated = (v, files) => post({ k: 'outdated', v: String(v || ''), files: Array.isArray(files) ? files : [] });
   // Fin de partie : le jeu de l'hôte transmet le classement au Hub (historique et classement entre potes)
   H.report = (r) => post({ k: 'result', r });
   H.playerName = (id) => { const p = H.players.find((q) => q.id === id); return p ? p.name : '?'; };

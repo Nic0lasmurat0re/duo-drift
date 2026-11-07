@@ -21,6 +21,11 @@
   - Le Hub se met à jour tout seul quand une nouvelle version sort (jamais au milieu d'une partie) et revient dans le même salon.
   - Si un joueur du salon a une version plus récente, les autres se mettent à jour et reviennent tout seuls.
   - Dans le salon, chaque joueur affiche sa version ; au lancement, un avertissement prévient si quelqu'un n'est pas à jour.
+  - Quand l'hôte se met à jour, il revient bien dans le salon (repris par un autre joueur sous un nouveau code) au lieu de se retrouver seul.
+- **The Backrooms** — Plus jamais de parties où chacun a sa propre carte.
+  - Si ta carte n'est pas celle de l'hôte (une ancienne version gardée par le navigateur), ton jeu se met à jour tout seul et te ramène dans la même partie, sur la même carte.
+  - Si c'est l'hôte qui a l'ancienne version, c'est lui qui se met à jour : la partie continue pour les autres pendant ce temps, et il revient dedans.
+  - Un joueur qui a raté le début d'une nouvelle partie la rattrape tout seul, au lieu de rester sur l'ancienne carte.
 - **The Backrooms** — Tous les niveaux au même niveau de détail que le Level 0.
   - Level 2 (Tuyauteries) : les réserves sont en vraie brique, avec son relief, et les chaufferies en brique peinte écaillée ; le carrelage et l'enduit sont salis comme le papier peint du Level 0.
   - Level 37 (Poolrooms) : carrelages deux fois plus fins, nets même collé au mur.

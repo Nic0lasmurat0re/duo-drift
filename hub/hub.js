@@ -47,7 +47,7 @@
     } catch (e) { return ''; }
   }
   let updating = false;
-  async function updateTo(target) {
+  async function updateTo(target, extra = []) {
     if (updating) return;
     // on vient déjà de recharger pour cette version (elle n'est pas encore servie partout) : pas de boucle
     let last = null;
@@ -57,11 +57,13 @@
     try { sessionStorage.setItem('hub_update', JSON.stringify({ v: target, t: Date.now() })); } catch (e) {}
     toast(`Mise à jour vers la version ${target}…`, 8000);
     // les fichiers du Hub gardés par le navigateur sont repris pour de bon, puis la page (on revient dans le salon)
-    const urls = [...document.querySelectorAll('script[src], link[rel=stylesheet][href]')].map((e) => e.src || e.href).filter((u) => u.startsWith(location.origin));
+    // (et ceux du jeu, quand c'est lui qui a vu que sa carte n'était pas celle de l'hôte)
+    const urls = [...document.querySelectorAll('script[src], link[rel=stylesheet][href]')].map((e) => e.src || e.href).concat(extra).filter((u) => u.startsWith(location.origin + '/'));
     await Promise.all(urls.map((u) => fetch(u, { cache: 'reload' }).catch(() => {})));
     const q = new URLSearchParams();
     for (const k of ['local', 'ws', 'as', 'debug', 'mute']) if (QS.has(k)) q.set(k, QS.get(k));
-    const code = room && room.mode !== 'solo' && room.code;
+    // l'hôte qui part laisse le salon au suivant, sous un autre code : c'est celui-là qu'on rejoint en revenant
+    const code = room && room.successorCode();
     if (code) q.set('join', code);
     location.replace(location.pathname + (q.toString() ? '?' + q.toString().replace(/=(&|$)/g, '$1') : ''));
   }
@@ -771,6 +773,15 @@ const watchdog = setTimeout(() => {
       case 'log': if (window.DDLogger && d.entry) window.DDLogger.receiveFromChild(d.entry); break;
       case 'shown': if (window.HubInGame) window.HubInGame.shown(); break;
       case 'exit': leaveGame(); break;
+      case 'outdated': {
+        // en pleine partie, le jeu a vu que sa carte n'est pas celle de l'hôte (une autre version, ou des fichiers
+        // abîmés dans le cache) : la partie est injouable ainsi. On reprend tout à la version la plus récente des deux
+        // et on revient dans le salon, puis dans la partie
+        const v = verNum(d.v) > verNum(VERSION) ? String(d.v) : VERSION;
+        const files = (Array.isArray(d.files) ? d.files : []).filter((u) => typeof u === 'string').slice(0, 100);
+        updateTo(v, files);
+        break;
+      }
     }
   });
   // Quitter le jeu : l'hôte ferme la partie pour tout le salon, un invité revient seul au salon
@@ -788,13 +799,30 @@ const watchdog = setTimeout(() => {
 
   addEventListener('pagehide', () => { try { if (room) room.leave(); } catch (e) {} });
   if (joinParam) $('#name').focus();
-  // juste après une mise à jour automatique : on revient tout seul dans le salon qu'on a quitté pour elle
+  // juste après une mise à jour automatique : on revient tout seul dans le salon qu'on a quitté pour elle. Si on était
+  // l'hôte, le salon est repris sous un nouveau code par un autre joueur, qui met un instant à le rouvrir : on réessaie
+  // pendant 25 s
   try {
     const upd = JSON.parse(sessionStorage.getItem('hub_update') || 'null');
     if (joinParam && upd && Date.now() - upd.t < 60000 && !upd.back) {
       upd.back = true;
       sessionStorage.setItem('hub_update', JSON.stringify(upd));
-      setTimeout(() => { if (!room && $('#joinCode').value.length === 4) $('#btnJoin').click(); }, 300);
+      const code = joinParam.toUpperCase().slice(0, 4);
+      const t0 = Date.now();
+      let lastTry = 0;
+      const tryJoin = () => {
+        if (room && room.mode && room.myId >= 0) return; // de retour dans le salon
+        if (Date.now() - t0 > 25000 || code.length !== 4) return;
+        // pas encore de salon, refusé (pas encore rouvert), ou sans réponse depuis 5 s : on retente
+        if (!room || !room.mode || Date.now() - lastTry > 5000) {
+          lastTry = Date.now();
+          if (room) goHome();
+          $('#joinCode').value = code;
+          $('#btnJoin').click();
+        }
+        setTimeout(tryJoin, 1000);
+      };
+      setTimeout(tryJoin, 300);
     }
   } catch (e) {}
 })();
