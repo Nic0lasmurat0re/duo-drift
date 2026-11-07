@@ -83,6 +83,8 @@ export class BackroomsHUD {
         <div class="tape-date" id="tapeDate"></div>
         <div class="stamina" id="stamina"><span>STAMINA</span><div class="stamina-track"><div class="stamina-bar" id="staminaBar"></div></div></div>
         <div class="crouch-tag" id="crouchTag" hidden>▼ CROUCHED</div>
+        <!-- les touches utiles, en petit, comme une ligne de plus de l'écran du caméscope -->
+        <div class="keys-tag" id="keysTag"></div>
       </div>
       <div class="cam cam-br">
         <div class="tapes"><span id="cassetteIcons"></span> <b id="cassetteText">0/5</b></div>
@@ -418,6 +420,7 @@ export class BackroomsHUD {
   // le bandeau du rejeu (on = false : caché)
   // la voix : ce qu'on émet (VOICE à côté de soi, RADIO dans le talkie) et qui parle dans le talkie
   voice(v, sim, multi, dead = false) {
+    this.keysLine(sim, multi);
     const el = this.$('#voiceTag');
     if (!el) return;
     const mode = v.mode;
@@ -444,6 +447,22 @@ export class BackroomsHUD {
     bar.firstChild.style.width = `${Math.round(Math.min(1, v.level) * 100)}%`;
     bar.classList.toggle('loud', v.level > 0.75);
     this.$('#voiceIn').textContent = names.length ? `RADIO · ${names.join(', ').toUpperCase()}` : '';
+  }
+
+  // le rappel des touches : interagir, utiliser, et le talkie à plusieurs (la voix de proximité n'a pas de touche)
+  keysLine(sim, multi) {
+    const el = this.$('#keysTag');
+    if (!el) return;
+    const P = sim.player;
+    const on = !!P && P.status === 'alive' && P.hidden < 0 && !document.body.classList.contains('touch');
+    const k = on ? `${multi ? 1 : 0}` : '';
+    if (k === this.keysK) return;
+    this.keysK = k;
+    el.hidden = !on;
+    if (!on) return;
+    const keys = [['F', 'INTERACT'], ['E', 'USE']];
+    if (multi) keys.push(['R', 'RADIO']);
+    el.innerHTML = keys.map(([key, what]) => `<span><kbd>${key}</kbd>${what}</span>`).join('');
   }
 
   replayTag(on) {

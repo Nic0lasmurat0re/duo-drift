@@ -266,7 +266,7 @@ export function createVoice({ send, myId, sfx }) {
       n.start();
       hiss = g;
     }
-    hiss.gain.setTargetAtTime(on ? 0.025 + on * 0.05 : 0, c.currentTime, 0.04);
+    hiss.gain.setTargetAtTime(on ? 0.016 + on * 0.032 : 0, c.currentTime, 0.04);
   }
 
   // Le haut-parleur du talkie pour les sons qui ne viennent de personne (les parasites) : la même bande étroite, le
@@ -293,7 +293,7 @@ export function createVoice({ send, myId, sfx }) {
     for (let i = 0; i < 1024; i++) k[i] = Math.round((Math.tanh(((i / 1023) * 2 - 1) * 5) / Math.tanh(5)) * 18) / 18;
     sh.curve = k;
     const g = c.createGain();
-    g.gain.value = 0.9;
+    g.gain.value = 0.45; // les parasites restent sous les voix : ils inquiètent, ils ne vrillent pas les oreilles
     hp.connect(pk).connect(lp).connect(sh).connect(g).connect(o);
     fx = hp;
     return fx;
@@ -433,12 +433,12 @@ export function createVoice({ send, myId, sfx }) {
       cap = '[the radio beeps]';
     } else {
       dur = rnd(0.5, 1.6);
-      crackle(t + 0.05, dur, 0.55);
+      crackle(t + 0.05, dur, 0.4);
       cap = '[radio static]';
     }
-    squelch(true, 0.1);
+    squelch(true, 0.055);
     parBusy = dur + 0.3;
-    setTimeout(() => squelch(false, 0.1), (dur + 0.15) * 1000);
+    setTimeout(() => squelch(false, 0.055), (dur + 0.15) * 1000);
     if (sfx.caption) sfx.caption(cap, null);
   }
 
@@ -525,7 +525,7 @@ export function createVoice({ send, myId, sfx }) {
       }
     },
 
-    // à chaque image. want : 0, 1 (voix) ou 2 (talkie) d'après les touches ; open : micro ouvert (la voix sans touche)
+    // à chaque image. want : 0 ou 2 (talkie, R maintenu) ; open : la voix de proximité, toujours ouverte (sans touche)
     // sim, V : la partie et le joueur dont on écoute (soi, ou celui qu'on regarde une fois mort) ; alive : soi vivant
     // radio : { ok (le talkie marche), danger (l'entité près de soi, 0 à 1), live (partie en cours, pas en pause) }
     update(sim, V, dt, want, open, alive, radio = { ok: true, danger: 0, live: true }) {
@@ -622,8 +622,8 @@ export function createVoice({ send, myId, sfx }) {
       }
       // tout près d'elle, le talkie capte des interférences, même quand personne ne parle
       const near = alive && radioOk ? Math.max(0, ((radio.danger || 0) - 0.45) / 0.55) : 0;
-      if (near > 0 && Math.random() < dt * near * 6) crackle(c.currentTime + 0.01, rnd(0.05, 0.25), 0.25 + near * 0.35);
-      hissOn(Math.max(rx, near * 0.5, parBusy > 0 ? 0.3 : 0));
+      if (near > 0 && Math.random() < dt * near * 6) crackle(c.currentTime + 0.01, rnd(0.05, 0.25), 0.15 + near * 0.2);
+      hissOn(Math.max(rx, near * 0.5, parBusy > 0 ? 0.2 : 0));
     },
 
     // (tests) l'état des liaisons

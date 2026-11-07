@@ -4,18 +4,20 @@
 - **The Backrooms** — Un screamer qui fait vraiment sursauter, une clé pour l'escalier, et un caméscope plus lisible.
   - Le screamer a été refait : un instant de noir et de silence total, puis son visage blême, orbites vides et mâchoire décrochée, se jette contre l'objectif et tressaute, avec un cri plus violent.
   - Ton souffle est beaucoup plus discret : on l'entend surtout en courant, à peine quand on marche.
-  - L'image ne devient floue qu'en courant.
+  - L'image ne devient plus floue tout le temps : seulement de temps en temps quand tu cours, le temps que l'autofocus raccroche.
   - « PRESS F » ou « PRESS E » s'affiche quand tu peux ramasser un objet, te cacher, poser l'échelle, boire l'eau d'amande ou changer les piles.
   - Le signal du caméscope capte de plus loin.
   - La porte du haut de la cage d'escalier est fermée par une chaîne et un cadenas. La clé traîne quelque part dans le noir de l'étage du haut, sur un carton : le laiton brille quand ta lampe passe dessus. Celui qui la trouve ouvre la porte pour tout le monde. Les trous dans le sol restent un raccourci… risqué.
   - Le signal du caméscope te guide vers la clé une fois les cassettes de l'étage trouvées.
+  - Un petit rappel des touches (F interagir, E utiliser, R talkie à plusieurs) s'affiche en bas à gauche, discret, avec le reste de l'écran du caméscope.
+  - Corrigé : il arrivait de devoir garder le clic gauche enfoncé pour tourner la caméra. Si la souris n'a pas pu être capturée (par exemple en recliquant juste après Échap), un nouveau clic suffit maintenant.
 - **The Backrooms** — Voix de proximité et talkie-walkie (micro à autoriser dans le navigateur).
-  - Maintiens V pour parler aux joueurs proches : ta voix porte une vingtaine de mètres, passe mal les murs et très mal les planchers, et résonne dans les couloirs.
+  - Parle, tout simplement, pour être entendu des joueurs proches (pas de touche, le micro est ouvert) : ta voix porte une vingtaine de mètres, passe mal les murs et très mal les planchers, et résonne dans les couloirs.
   - Maintiens R pour parler dans le talkie : toute l'équipe t'entend, avec le son nasillard d'une vieille radio, de plus en plus haché quand on est loin.
   - Attention : l'entité entend aussi. Parler fait du bruit là où tu es, et le talkie grésille chez ceux qui le reçoivent. Plus l'équipe parle, plus elle devient agressive.
-  - Le talkie lâche parfois des parasites tout seul : grésillements, bips, une respiration, une voix qui ne veut rien dire. Plus souvent quand elle rôde ; tout près d'elle, il crépite.
+  - Le talkie lâche parfois des parasites tout seul, sans couvrir les voix : grésillements, bips, une respiration, une voix qui ne veut rien dire. Plus souvent quand elle rôde ; tout près d'elle, il crépite.
   - Pendant les coupures de courant, les talkies sont morts.
-  - Nouveau dans ⚙️ Réglages : « Voix » (appuyer pour parler, micro ouvert ou coupé, volume des voix).
+  - Nouveau dans ⚙️ Réglages : « Voix » (micro activé ou coupé, volume des voix).
 
 ## 4.58 — 7 novembre 2026
 - **Fief Maudit** — Un début de partie plus vif.

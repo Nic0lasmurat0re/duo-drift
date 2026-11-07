@@ -2146,6 +2146,8 @@ float ghash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453)
   let frameAvg = 16;
   let lines = 720;
   let focusT = 0;
+  let focusPulse = 0; // temps restant de la « chasse » de mise au point en cours
+  let focusWait = 3 + Math.random() * 4; // secondes de course avant la prochaine
   let lastExp = 1.2;
   const api = {
     level: map0.level || 0,
@@ -2461,10 +2463,17 @@ float ghash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453)
       const wantExp = THREE.MathUtils.clamp(0.45 / (0.15 + lightHere), 0.9, 1.4);
       // il s'ouvre lentement dans le noir, se referme vite sous la lumière (comme un vrai caméscope)
       exposure += (wantExp - exposure) * Math.min(1, dt * (wantExp > exposure ? 0.65 : 2.4));
-      // la mise au point ne décroche qu'en courant (la caméra secouée) ; au pas ou à l'arrêt, l'image reste nette
+      // la mise au point ne décroche qu'en courant (la caméra secouée), et seulement par à-coups : de temps en temps
+      // l'autofocus « chasse » une demi-seconde puis se raccroche ; au pas ou à l'arrêt, l'image reste nette
       lastExp = exposure;
-      if (P.running && P.moving && P.status === 'alive') focusT = Math.min(0.45, focusT + dt * 0.9);
-      else focusT = Math.max(0, focusT - dt * 1.6);
+      const runs = P.running && P.moving && P.status === 'alive';
+      if (focusPulse > 0) focusPulse = Math.max(0, focusPulse - dt);
+      else if (runs && (focusWait -= dt) <= 0) {
+        focusPulse = 0.45 + Math.random() * 0.4;
+        focusWait = 4 + Math.random() * 7;
+      }
+      if (focusPulse > 0 && runs) focusT = Math.min(0.42, focusT + dt * 2.4);
+      else focusT = Math.max(0, focusT - dt * 1.4);
       // balance des blancs automatique : un peu bleue dans le noir, chaude sous les néons
       const wb = THREE.MathUtils.clamp(lightHere, 0, 1);
       const white = L2 ? [1, 1, 1] : [0.96 + wb * 0.06, 1, 1.07 - wb * 0.1];

@@ -78,8 +78,10 @@ let started = false; // la première prise en main (avant : l'écran titre)
 let padCrouch = false; // accroupi à la manette (stick droit enfoncé : bascule)
 
 // Réglages du joueur (sur cet appareil) : souris, image, accessibilité
-const OPT_DEFAULT = { sens: 1, invertY: false, fov: 72, motion: 1, bright: 1, reduceFlashes: false, subs: false, layout: 'auto', quality: 'auto', mic: 'ptt', voiceVol: 1 };
+const OPT_DEFAULT = { sens: 1, invertY: false, fov: 72, motion: 1, bright: 1, reduceFlashes: false, subs: false, layout: 'auto', quality: 'auto', mic: 'on', voiceVol: 1 };
 const OPTS = { ...OPT_DEFAULT, ...store.get('backrooms_opts', {}) };
+// anciens réglages : « appuyer pour parler » et « micro ouvert » ne font plus qu'un (la voix de proximité est toujours ouverte)
+if (OPTS.mic !== 'off') OPTS.mic = 'on';
 let detectedQwerty = false;
 const qwerty = () => OPTS.layout === 'qwerty' || (OPTS.layout === 'auto' && detectedQwerty);
 function applyOpts() {
@@ -94,7 +96,7 @@ function applyOpts() {
   if (voice) voice.setVolume(OPTS.voiceVol);
 }
 
-// Voix de proximité (V) et talkie-walkie (R) : WebRTC entre joueurs, signalisation par le salon (view/voice.js)
+// Voix de proximité (toujours ouverte, sans touche) et talkie-walkie (R maintenu) : WebRTC entre joueurs, signalisation par le salon (view/voice.js)
 let voice = null;
 let micWarned = false;
 const sfxRef = { get ctx() { return sfx && sfx.ctx; }, get verb() { return sfx && sfx.verb; }, moveTo: (...a) => sfx && sfx.moveTo(...a), caption: (...a) => sfx && sfx.caption(...a) };
@@ -105,10 +107,10 @@ function ensureVoice() {
   }
   return voice;
 }
-// le micro : demandé au lancement à plusieurs (ou seul en micro ouvert : elle t'entend), sinon à la première touche
+// le micro : demandé au lancement à plusieurs (seul, il n'y a personne à qui parler), sinon à la première touche R
 function askMic(force = false) {
   if (OPTS.mic === 'off') return;
-  if (!force && !multi() && OPTS.mic !== 'open') return;
+  if (!force && !multi()) return;
   const v = ensureVoice();
   if (v.micState === 'on' || v.micState === 'asking') return;
   v.enableMic().then((ok) => {
@@ -152,8 +154,10 @@ function play() {
   askMic();
   const tactile = document.body.classList.contains('touch') || matchMedia('(pointer: coarse)').matches;
   if (tactile) document.body.classList.add('touch');
-  if (kbMode || tactile || noLock) setPaused(false);
+  if (kbMode || tactile) setPaused(false);
   else {
+    // en mode « glisser », on retente quand même de verrouiller la souris à chaque clic : si ça passe, on en sort
+    if (noLock) setPaused(false);
     try {
       const p = stageEl.requestPointerLock?.();
       if (p && p.catch) p.catch(lockRefused);
@@ -163,8 +167,21 @@ function play() {
   }
 }
 
+// Le navigateur refuse de reverrouiller la souris pendant ~1 s après Échap : ce refus-là est passager (on reste en
+// pause, un nouveau clic suffit). On ne passe à « cliquer-glisser pour regarder » que si le verrou est vraiment
+// impossible (refusé deux fois hors de ce délai).
+let lockExitAt = 0;
+let lockFails = 0;
 function lockRefused() {
   if (noLock) return;
+  if (performance.now() - lockExitAt < 1800) {
+    if (hud) hud.toast('Click again to look around');
+    return;
+  }
+  if (++lockFails < 2) {
+    if (hud) hud.toast('Click again to look around');
+    return;
+  }
   noLock = true;
   setPaused(false);
   if (hud) hud.toast('Mouse look: hold the click and drag · Esc to pause');
@@ -206,9 +223,9 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyE') act.use = true;
     else if (e.code === 'KeyF') act.pick = true;
     else if (e.code === 'KeyT') act.whistle = true;
-    else if (e.code === 'KeyV' || e.code === 'KeyR') {
+    else if (e.code === 'KeyR') {
       askMic(true);
-      if (e.code === 'KeyR' && !multi() && hud) hud.toast('The radio only hisses · no one else is out there');
+      if (!multi() && hud) hud.toast('The radio only hisses · no one else is out there');
     }
   }
   if ((kbMode || noLock) && (e.code === 'Escape' || e.code === 'KeyP')) setPaused(true);
@@ -302,6 +319,11 @@ stageEl.addEventListener('click', () => {
 
 document.addEventListener('pointerlockchange', () => {
   isPointerLocked = document.pointerLockElement === stageEl;
+  if (isPointerLocked) {
+    // le verrou a fini par passer : plus besoin de garder le clic enfoncé
+    noLock = false;
+    lockFails = 0;
+  } else lockExitAt = performance.now();
   if (!kbMode && !noLock) setPaused(!isPointerLocked);
 });
 
@@ -1235,10 +1257,11 @@ function loop(currentTime) {
   if (voice) {
     // V : parler autour de soi ; R : dans le talkie (à plusieurs) ; micro ouvert : la voix passe sans touche
     const me = sim.player;
-    const want = OPTS.mic === 'off' ? 0 : keys['KeyR'] && multi() ? 2 : keys['KeyV'] ? 1 : 0;
+    // la voix part toute seule dès qu'on parle (proximité) ; le talkie, seulement en maintenant R
+    const want = OPTS.mic !== 'off' && keys['KeyR'] && multi() ? 2 : 0;
     // le talkie grésille tout seul de temps en temps (plus souvent quand elle rôde) ; en coupure, il est mort
     const radioOk = !sim.radioDead;
-    voice.update(sim, sim.viewPlayer(sim.spectate || 0), delta, want, OPTS.mic === 'open' && !paused, me.status === 'alive', { ok: radioOk, danger: me.danger || 0, live: !paused && sim.state === 'playing' });
+    voice.update(sim, sim.viewPlayer(sim.spectate || 0), delta, want, OPTS.mic !== 'off' && !paused, me.status === 'alive', { ok: radioOk, danger: me.danger || 0, live: !paused && sim.state === 'playing' });
     if (hud) hud.voice(voice, sim, multi(), !!keys['KeyR'] && !radioOk && multi());
   }
   if (hud) {
@@ -1278,9 +1301,9 @@ if (window.DDVolume && btnSet) {
         { label: 'Qualité', get: () => OPTS.quality, set: (v) => setOpt('quality', v), options: [['auto', 'Auto'], ['low', 'Basse'], ['medium', 'Moyenne'], ['high', 'Haute']] },
       ], hint: 'Luminosité : réglez-la pour que le carré de gauche soit à peine visible.' },
       { title: 'Voix', items: [
-        { label: 'Micro', get: () => OPTS.mic, set: (v) => { setOpt('mic', v); if (v !== 'off' && started) askMic(true); }, options: [['ptt', 'Appuyer pour parler'], ['open', 'Micro ouvert'], ['off', 'Coupé']] },
+        { label: 'Micro', get: () => OPTS.mic, set: (v) => { setOpt('mic', v); if (v !== 'off' && started) askMic(true); }, options: [['on', 'Activé'], ['off', 'Coupé']] },
         { label: 'Volume des voix', get: () => OPTS.voiceVol, set: (v) => setOpt('voiceVol', +v), range: [0, 2, 0.1], format: (v) => `${Math.round(v * 100)} %` },
-      ], hint: "V : parler aux joueurs proches (on vous entend à travers les murs, mal). R : parler dans le talkie, à toute l'équipe. Attention : l'entité entend aussi, et plus vous parlez, plus elle devient agressive. Le talkie grésille aussi chez ceux qui le reçoivent." },
+      ], hint: "Votre voix porte toute seule jusqu'aux joueurs proches (on vous entend à travers les murs, mal). R maintenu : parler dans le talkie, à toute l'équipe. Attention : l'entité entend aussi, et plus vous parlez, plus elle devient agressive. Le talkie grésille aussi chez ceux qui le reçoivent." },
       { title: 'Accessibilité', items: [
         { label: 'Réduire les flashs', get: () => OPTS.reduceFlashes, set: (v) => setOpt('reduceFlashes', v), options: [[false, 'Non'], [true, 'Oui']] },
         { label: 'Sous-titres', get: () => OPTS.subs, set: (v) => setOpt('subs', v), options: [[false, 'Non'], [true, 'Oui']] },
@@ -1297,7 +1320,8 @@ if (window.DDVolume && btnSet) {
         ['Choisir une case · utiliser', '<kbd>2</kbd> <kbd>3</kbd> · <kbd>E</kbd>'],
         ['Ramasser (échange si plein)', '<kbd>F</kbd>'],
         ['Siffler (attention à l\'entité)', '<kbd>T</kbd>'],
-        ['Parler (proximité) · talkie', '<kbd>V</kbd> · <kbd>R</kbd> (maintenir)'],
+        ['Parler aux joueurs proches', 'micro ouvert'],
+        ['Talkie-walkie (toute l\'équipe)', '<kbd>R</kbd> (maintenir)'],
         ['Pause', '<kbd>Échap</kbd>'],
       ] }] },
       { title: 'Sans souris', items: [{ keys: [

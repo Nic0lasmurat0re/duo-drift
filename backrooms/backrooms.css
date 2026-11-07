@@ -592,6 +592,10 @@ body.touch .click-prompt .ctrl-choice { display: none; }
 /* La voix : ce qu'on émet, le niveau du micro (rouge quand on crie : elle entend), qui parle au talkie */
 .voice-tag { position: absolute; left: 32px; bottom: 120px; z-index: 13; display: flex; flex-direction: column; gap: 4px; font-size: 18px; letter-spacing: 2px; color: #f2f0e6; text-shadow: 0 0 5px rgba(0,0,0,0.9); pointer-events: none; }
 .voice-tag span:empty { display: none; }
+/* le rappel des touches : une ligne pâle de l'écran du caméscope, sous l'endurance */
+.keys-tag { display: flex; gap: 14px; margin-top: 8px; font-size: 16px; letter-spacing: 2px; opacity: 0.55; }
+.keys-tag[hidden] { display: none; }
+.keys-tag kbd { font: inherit; display: inline-block; min-width: 1.15em; padding: 0 3px; margin-right: 5px; text-align: center; border: 1px solid currentColor; line-height: 1.15; }
 .voice-tag #voiceOut { color: #9be37a; }
 .voice-tag.radio #voiceOut { color: #ffcf3a; }
 .voice-tag #voiceIn { color: #ffcf3a; animation: replayBlink 1.2s steps(2) infinite; }
