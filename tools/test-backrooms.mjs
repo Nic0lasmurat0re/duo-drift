@@ -1341,6 +1341,13 @@ test("réseau : un invité qui perd l'équilibre chez lui tombe chez l'hôte, et
   assert.equal(g.floor, 1, "l'invité est tombé à l'étage du dessous");
 });
 
+test("Level 0 : aucune cassette du bas sous un trou du haut (on la verrait au fond du puits sans pouvoir la prendre)", () => {
+  for (let sd = 1; sd <= 60; sd++) {
+    const [up, down] = createLevel0(sd).floors;
+    for (const c of down.cassettes) assert.ok(up.pits.every((p) => Math.hypot(p.x - c.x, p.z - c.z) >= 6), `graine ${sd} : cassette ${c.id} sous un trou`);
+  }
+});
+
 test("Level 0 sur deux étages : les trous mènent en bas, deux escaliers loin des trous, les cassettes réparties", () => {
   for (const sd of [1, 7, 19, 33, 64]) {
     const L = createLevel0(sd);

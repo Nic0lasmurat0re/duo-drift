@@ -871,7 +871,11 @@ export function createLevel0(seed = 42) {
   up.cassettes = keepUp;
   const downDist = gridDist(down.grid, W, down.H);
   const fixedDown = [...stairs.map((st) => ({ x: st.gx, z: st.gz })), cellOf(down.spawn)];
-  down.cassettes = spreadOut(down.cassettes.map(cellOf), fixedDown, freeIds.length, downDist, rnd).map((o) => o.c);
+  // jamais sous un trou du haut (ni tout près) : vue d'en haut au fond du puits, elle brillait sans qu'on puisse la
+  // prendre, et le signal (celui de l'étage où l'on est) ne la comptait pas
+  const downCands = down.cassettes.map(cellOf);
+  const clear = downCands.filter((o) => !up.pits.some((p) => Math.hypot(p.x - o.c.x, p.z - o.c.z) < 6));
+  down.cassettes = spreadOut(clear.length >= freeIds.length ? clear : downCands, fixedDown, freeIds.length, downDist, rnd).map((o) => o.c);
   down.cassettes.forEach((c, i) => {
     c.id = freeIds[i];
   });

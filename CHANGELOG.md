@@ -16,6 +16,7 @@
   - Sur un écran à plus de 60 images par seconde, la souris ne perd plus de mouvement (avant, plus de la moitié pouvait sauter à 144 Hz), et ta propre marche est fluide à chaque image.
   - Les voix résonnent de nouveau dans les couloirs : un peu d'écho de près, beaucoup quand le coéquipier est loin ou derrière un mur.
   - Tout le monde voit le caméscope des coéquipiers (avant, seul celui de l'hôte s'affichait), et l'image de leur petit écran tourne avec leur regard, sans à-coups.
+  - Fini les cassettes qu'on voit briller au fond d'un trou sans pouvoir les prendre (elles étaient à l'étage du dessous, et le signal ne les comptait pas) : celles d'en bas ne sont plus jamais sous un trou.
 - **Hub** — Fini les parties entre joueurs qui n'ont pas la même version.
   - Le Hub se met à jour tout seul quand une nouvelle version sort (jamais au milieu d'une partie) et revient dans le même salon.
   - Si un joueur du salon a une version plus récente, les autres se mettent à jour et reviennent tout seuls.
